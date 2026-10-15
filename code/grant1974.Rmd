@@ -1,0 +1,811 @@
+---
+title: "1974cleaning"
+author: "Noah Thomas"
+date: "2026-05-25"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+necessary libraries. 
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(openxlsx)
+library(stringdist)
+library(maps)
+library(zipcodeR)
+```
+
+reading in file. A dataframe is created representing the 1974 spreadsheet
+```{r}
+grants1974 = read.csv("grants1974.csv", header = TRUE)
+```
+
+adding columns based on known info. ID is row number, and we separate source file to create the columns year and month. 
+```{r}
+grants1974 <- grants1974 %>%
+  mutate(ID = row_number(), .before = 1)
+
+grants1974 <- grants1974 %>%
+  separate(source_file,
+           into = c("year", "month_num", "month"),
+           sep = "-") %>%
+   mutate(
+    month = month.name[match(month, month.abb)]
+  ) %>%
+  select(ID, year, month, everything(), -month_num)
+```
+
+We noticed that many rows are duplicates of previous ones. we remove the duplicates here
+```{r}
+length(unique(grants1974$grant.number))
+grants1974 = grants1974[!duplicated(grants1974$grant.number), ]
+```
+
+
+all columns should be named NEW unless they are blank; will fix it below 
+```{r}
+sum(is.na(grants1974$grant.type))
+table(grants1974$grant.type)
+```
+```{r}
+grants1974$grant.type = ifelse(trimws(grants1974$grant.type) == "", "X", "NEW")
+```
+
+same thing for program. will rename everything to construction except for the blanks
+```{r}
+sum(is.na(grants1974$program))
+sort(table(grants1974$program), decreasing = TRUE)
+```
+
+```{r}
+grants1974$program = ifelse(trimws(grants1974$program) == "", "X", "CONSTRUCTION")
+```
+
+more complicated errors for step. will look into it below. will use fuzzy matching, a string matching method that assigns a score or distance to an entry on how similar it is to the keywords its analyzing. here, the keywords would be the entries in valid_steps. Based on the distance from each entry to a keyword, we either will or will not assign that entry to the keyword. my algorithm used is below
+```{r}
+sum(is.na(grants1974$step))
+sort(table(grants1974$step), decreasing = TRUE)
+```
+after getting rid of all white space, blank cells turn to X
+```{r}
+grants1974$step[trimws(grants1974$step) == ""] = "X"
+```
+
+```{r}
+valid_steps <- c(
+  "STEP ONE",
+  "STEP TWO",
+  "STEP THREE",
+  "STEP TWO AND THREE COMBINED",
+  "X"
+)
+
+grants1974$step_clean <- valid_steps[
+  amatch(grants1974$step, valid_steps, method = "jw", maxDist = 0.20)
+]
+grants1974$step_clean[is.na(grants1974$step_clean)] = paste0("incorrect_", grants1974$step[is.na(grants1974$step_clean)])
+```
+
+```{r}
+table(grants1974$step_clean, useNA = "always")
+```
+
+my new, cleaned values are in the step_clean column
+```{r}
+grants1974[, c("step", "step_clean")]
+```
+
+
+Most cells were sorted, but not all; below is an attempt to sort every single cell. ultimately, this does not work out and cells are sorted to values that are incorrect, so we go with step_clean. this workflow is not present in any other file, but i still want to include this here to showcase other methods / options I have tried
+
+```{r}
+grants1974$step_match = grants1974$step_clean
+bad_rows = which(is.na(grants1974$step_match))
+
+failed_values = grants1974$step[bad_rows]
+failed_clean = tolower(failed_values)
+failed_clean = trimws(failed_clean)
+
+
+valid_steps2 = c("step one", "step two", "step three", "step two and three combined")
+
+dist_matrix = stringdistmatrix(failed_values,
+                                valid_steps,
+                                method = "jw")
+
+repair_match = valid_steps[max.col(-dist_matrix)]
+grants1974$step_match[bad_rows] <- repair_match
+```
+
+We can find that our attempt to try to label the NA values was not very accurate. Thus, i am going to proceed with the NA values to preserve accuracy. further changes can be made down the line
+```{r}
+grants1974[bad_rows, c("step", "step_match")]
+```
+we prefer our cleaning for step_clean, so we override the original column with the clean column
+```{r}
+grants1974$step = grants1974$step_clean
+grants1974 <- grants1974 %>% select(-c(step_clean, step_match))
+```
+
+We put Xs in empty columns. other than that we leave this column alone
+```{r}
+grants1974$title[trimws(grants1974$title) == ""] = "X"
+```
+
+For award amount, some cells have $ while others do not. For all cells, i am removing \$ so they can easily be formatted in excel later in time. I also found some had a D instead of an \$. I also adjust this. Some cells are a little more difficult in that some values are not picking up (ex: ,050,000 is a cell but there are numbers before).i mark these values with a Y
+```{r}
+grants1974$award.amount = trimws(grants1974$award.amount)
+flagged_vals = grepl("^[,0]", grants1974$award.amount)
+grants1974$award.amount[flagged_vals] = "Y"
+grants1974$award.amount[grants1974$award.amount != "Y"] = gsub("\\$", "", grants1974$award.amount[grants1974$award.amount != "Y"])
+grants1974$award.amount[grants1974$award.amount != "Y"] = gsub(",", "", grants1974$award.amount[grants1974$award.amount != "Y"])
+grants1974$award.amount[grants1974$award.amount != "Y"] = gsub("\\.", "", grants1974$award.amount[grants1974$award.amount != "Y"])
+grants1974$award.amount[grants1974$award.amount != "Y"] = gsub("[A-Za-z]+", "", grants1974$award.amount[grants1974$award.amount != "Y"])
+numpart = as.numeric(grants1974$award.amount[grants1974$award.amount != "Y"])
+grants1974$award.amount[grants1974$award.amount != "Y"] = as.character(numpart)
+grants1974$award.amount[is.na(grants1974$award.amount)] = "X"
+```
+a few results to observe that my cleaning was successful
+```{r}
+sort(tail(table(grants1974$award.amount, useNA = "always")), decreasing = TRUE)
+```
+
+We do a similar algorithm for the other money variables
+```{r}
+grants1974$original.funds.awarded = trimws(grants1974$original.funds.awarded)
+flagged_vals = grepl("^[,0]", grants1974$original.funds.awarded)
+grants1974$original.funds.awarded[flagged_vals] = "Y"
+grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"] = gsub("\\$", "", grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"])
+grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"] = gsub(",", "", grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"])
+grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"] = gsub("\\.", "", grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"])
+grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"] = gsub("[A-Za-z]+", "", grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"])
+numpart = as.numeric(grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"])
+grants1974$original.funds.awarded[grants1974$original.funds.awarded != "Y"] = as.character(numpart)
+grants1974$original.funds.awarded[is.na(grants1974$original.funds.awarded)] = "X"
+```
+a few results to observe that my cleaning was successful
+```{r}
+sort(table(grants1974$original.funds.awarded, useNA = "always"), decreasing = TRUE)
+```
+
+eligible cost is the same
+```{r}
+grants1974$eligible.cost = trimws(grants1974$eligible.cost)
+flagged_vals = grepl("^[,0]", grants1974$eligible.cost)
+grants1974$eligible.cost[flagged_vals] = "Y"
+grants1974$eligible.cost[grants1974$eligible.cost != "Y"] = gsub("\\$", "", grants1974$eligible.cost[grants1974$eligible.cost != "Y"])
+grants1974$eligible.cost[grants1974$eligible.cost != "Y"] = gsub(",", "", grants1974$eligible.cost[grants1974$eligible.cost != "Y"])
+grants1974$eligible.cost[grants1974$eligible.cost != "Y"] = gsub("\\.", "", grants1974$eligible.cost[grants1974$eligible.cost != "Y"])
+grants1974$eligible.cost[grants1974$eligible.cost != "Y"] = gsub("[A-Za-z]+", "", grants1974$eligible.cost[grants1974$eligible.cost != "Y"])
+numpart = as.numeric(grants1974$eligible.cost[grants1974$eligible.cost != "Y"])
+grants1974$eligible.cost[grants1974$eligible.cost != "Y"] = as.character(numpart)
+grants1974$eligible.cost[is.na(grants1974$eligible.cost)] = "X"
+```
+a few results to observe that my cleaning was successful
+```{r}
+sort(tail(table(grants1974$eligible.cost, useNA = "always")), decreasing = TRUE)
+```
+
+total projected cost is the same
+```{r}
+grants1974$total.projected.cost = trimws(grants1974$total.projected.cost)
+flagged_vals = grepl("^[,0]", grants1974$total.projected.cost)
+grants1974$total.projected.cost[flagged_vals] = "Y"
+grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"] = gsub("\\$", "", grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"])
+grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"] = gsub(",", "", grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"])
+grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"] = gsub("\\.", "", grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"])
+grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"] = gsub("[A-Za-z]+", "", grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"])
+numpart = as.numeric(grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"])
+grants1974$total.projected.cost[grants1974$total.projected.cost != "Y"] = as.character(numpart)
+grants1974$total.projected.cost[is.na(grants1974$total.projected.cost)] = "X"
+```
+
+a few results to observe that my cleaning was successful
+```{r}
+sort(tail(table(grants1974$total.projected.cost, useNA = "always")), decreasing = TRUE)
+```
+
+award amount should be about 75% of eligible cost. we check this below. If this is not fulfilled then award amount is flagged with checkval, since either award amount or eligible cost can have the error. this also flags if award amount is greater than eligible cost; this shouldn't be possible, so if this is the case, it is also flagged with checkval
+
+```{r}
+grants1974$award.amount.num = as.numeric(gsub("[^0-9.-]", "", grants1974$award.amount))
+grants1974$eligible.cost.num = as.numeric(gsub("[^0-9.-]", "", grants1974$eligible.cost))
+
+grants1974$award.amount_clean = grants1974$award.amount.num
+x_num = suppressWarnings(as.numeric(grants1974$award.amount.num))
+y_num = suppressWarnings(as.numeric(grants1974$eligible.cost.num))
+
+numeric_rows = !is.na(x_num) & !is.na(y_num)
+
+grants1974$award.amount_clean[
+  numeric_rows & (x_num < 0.70 * y_num | x_num > y_num)
+] = NA
+grants1974$award.amount_clean[is.na(grants1974$award.amount_clean)] = paste0("checkvals_", grants1974$award.amount.num[is.na(grants1974$award.amount_clean)])
+```
+
+we observe our results below. my new values are in the award.amount_clean column
+```{r}
+grants1974[, c("award.amount.num", "award.amount_clean", "eligible.cost.num")]
+```
+
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$award.amount = grants1974$award.amount_clean
+grants1974 = grants1974 %>%  select(-c(award.amount_clean, award.amount.num, eligible.cost.num))
+```
+
+We can see level of treatment has similar problems to step. we use a similar fuzzy matching algorithm
+```{r}
+sort(table(grants1974$level.of.treatment), decreasing = TRUE)
+```
+
+```{r}
+grants1974$level.of.treatment[trimws(grants1974$level.of.treatment) == ""] = "X"
+valid_levels = c(
+  "SECONDARY",
+  "PRIMARY",
+  "TERTIARY",
+  "BEST PRACTICABLE TECHNOLOGY",
+  "X"
+)
+
+grants1974$level.of.treatment_clean <- valid_levels[
+  amatch(grants1974$level.of.treatment, valid_levels, method = "jw", maxDist = 0.20)
+]
+
+table(grants1974$level.of.treatment_clean, useNA = "always")
+grants1974$level.of.treatment_clean[is.na(grants1974$level.of.treatment_clean)] = paste0("incorrect_", grants1974$level.of.treatment[is.na(grants1974$level.of.treatment_clean)])
+```
+my new, cleaned entries are below in the level.of.treatment_clean column below. due to many Xs and NAs, we will most likely not use this column for analysis
+```{r}
+grants1974[, c("level.of.treatment", "level.of.treatment_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$level.of.treatment = grants1974$level.of.treatment_clean
+grants1974 <- grants1974 %>% select(-c(level.of.treatment_clean))
+```
+
+outfall looks to act like a boolean. Thus, everything that is an X will stay an X, and all the dashes will remain dashes. I will standardize this by making everything else ---
+```{r}
+grants1974$outfall = ifelse(grepl("X", toupper(grants1974$outfall)), "X", "---")
+sort(table(grants1974$outfall), decreasing = TRUE)
+```
+
+many features have this same quality. we will use a similar algorithm and logic. Upon looking at the documents, it looks as though the text recognition software was not extremely accurate with this variable. While i will change the variable here, it is worth to note this is most likely not suitable for analysis
+```{r}
+grants1974$force.main = ifelse(grepl("X", toupper(grants1974$force.main)), "X", "---")
+sort(table(grants1974$force.main), decreasing = TRUE)
+```
+As it is probable that the rest of the boolean variables have this problem, it is wise to proceed with caution. i will still change them here. for comb sewer we did something different in that if X is in the string, it will change to X due to how the entries were scanned
+```{r}
+grants1974$comb.sewer = ifelse(grepl("X", toupper(grants1974$comb.sewer)), "X", "---")
+sort(table(grants1974$comb.sewer), decreasing = TRUE)
+```
+
+we can see this column is mostly completely nonsense due to errors in the initial text recognition software, similar to the features above. i still attempt to sort it but it will not be used in analysis
+```{r}
+sort(table(grants1974$sludge.disposal), decreasing = TRUE)
+```
+
+```{r}
+grants1974$sludge.disposal[trimws(grants1974$sludge.disposal) == ""] = "X"
+valid_sludges = c(
+  "LAND DISPOSAL",
+  "LAND RECLAMATION",
+  "INCINERATED",
+  "X"
+)
+
+grants1974$sludge.disposal_clean <- valid_sludges[
+  amatch(grants1974$sludge.disposal, valid_sludges, method = "jw", maxDist = 0.20)
+]
+
+table(grants1974$sludge.disposal_clean, useNA = "always")
+grants1974$sludge.disposal_clean[is.na(grants1974$sludge.disposal_clean)] = paste0("incorrect_", grants1974$sludge.disposal[is.na(grants1974$sludge.disposal_clean)])
+```
+my new, cleaned entries are below in the sludge.disposal_clean column
+```{r}
+grants1974[, c("sludge.disposal", "sludge.disposal_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$sludge.disposal = grants1974$sludge.disposal_clean
+grants1974 = grants1974 %>% select(-c(sludge.disposal_clean))
+```
+
+boolean variable. we clean this variable like the boolean variables above
+```{r}
+grants1974$collect = ifelse(grepl("X", toupper(grants1974$collect)), "X", "---")
+sort(table(grants1974$collect), decreasing = TRUE)
+```
+
+an insane amount of nonsense and im not even sure what this variable is supposed to be. im gonna skip this
+```{r}
+sort(table(grants1974$infiltr), decreasing = TRUE)
+```
+Looks to have a lot of nonsense but ill alter it. same process as other boolean variables
+```{r}
+grants1974$other = ifelse(grepl("X", toupper(grants1974$other)), "X", "---")
+sort(table(grants1974$other), decreasing = TRUE)
+```
+
+
+For state, we used R's built-in character vector state.abb to match state abbreviations. We also add DC for good measure, PR for puerto rico, VI for virgin islands, and NB, which is what Nebraska was until a later date.
+```{r}
+sort(table(grants1974$state), decreasing = TRUE)
+```
+
+```{r}
+states <- c(state.abb, "DC", "NB", "PR", "VI")
+grants1974$state_clean <- toupper(trimws(as.character(grants1974$state)))
+
+grants1974$state_clean <- grants1974$state_clean |>
+  gsub("0", "O", x = _) |>
+  gsub("1", "I", x = _) |>
+  gsub("5", "S", x = _) |>
+  gsub("8", "B", x = _) |>
+  gsub("2", "Z", x = _) |>
+  gsub("6", "G", x = _)
+grants1974$state_clean <- sub(
+  ".*\\b([A-Z]{2})\\b.*",
+  "\\1",
+  grants1974$state_clean
+)
+
+grants1974$state_clean <- ifelse(
+  grants1974$state_clean %in% states,
+  grants1974$state_clean,
+  NA
+)
+sort(table(grants1974$state_clean, useNA = "always"), decreasing = TRUE)
+```
+
+My new, cleaned column is state_clean
+```{r}
+grants1974$state_clean[is.na(grants1974$state_clean)] = paste0("incorrect_", grants1974$state[is.na(grants1974$state_clean)])
+grants1974[, c("state", "state_clean")]
+```
+
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$state = grants1974$state_clean
+grants1974 = grants1974 %>% select(-c(state_clean))
+```
+
+With zipcode, i wanted to verify that the zip was on that was valid and that entries that werent a zip were marked with an X. we use the package zipcodeR to get a dataset of zip codes, so that valid zips are kept and invalid entries are turned into an X
+```{r}
+grants1974$ZIP.code_clean = sprintf("%05s", gsub("[^0-9]", "", grants1974$ZIP.code))
+grants1974$ZIP.code_clean = ifelse(grants1974$ZIP.code_clean %in% zip_code_db$zipcode, grants1974$ZIP.code_clean, "X")
+sort(table(grants1974$ZIP.code_clean, useNA = "always"), decreasing = TRUE)
+```
+
+
+My new, cleaned entries are below in the column ZIP.code_clean
+```{r}
+grants1974[, c("ZIP.code", "ZIP.code_clean")]
+```
+
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$ZIP.code = grants1974$ZIP.code_clean
+grants1974 = grants1974 %>%  select(-c(ZIP.code_clean))
+```
+
+Now we fix award date. i can notice some dates look to be incomplete. thus i am turnign them into NAs
+```{r}
+grants1974$award.date[trimws(grants1974$award.date) == ""] = "X"
+```
+
+```{r}
+clean_date = function(x) {
+  
+  x = trimws(as.character(x))
+  d = as.Date(x, format = "%m-%d-%y")
+  return(d)
+}
+```
+
+We get dates to all have a similar format and represent the correct date. anything that is ambiguous is flagged
+```{r}
+grants1974$award.date_clean = sapply(grants1974$award.date, clean_date)
+grants1974$award.date_clean = as.Date(grants1974$award.date_clean, origin = "1970-01-01")
+grants1974$award.date_clean = format(grants1974$award.date_clean, "%m-%d-%y")
+sort(table(grants1974$award.date_clean, useNA = "always"), decreasing = TRUE)
+grants1974$award.date_clean[is.na(grants1974$award.date_clean)] = paste0("incorrect_", grants1974$award.date[is.na(grants1974$award.date_clean)])
+```
+
+```{r}
+grants1974[, c("award.date", "award.date_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$award.date = grants1974$award.date_clean
+grants1974 = grants1974 %>%  select(-c(award.date_clean))
+```
+
+for CD, we clean up the cells so that they are all numeric. random nonsense is removed. leading 0s are kept. CDs also only go up to 435, so numbers above that will be flagged
+```{r}
+clean_num = function(x) {
+  
+  x = as.character(x)
+  x = gsub("[^0-9\\.]", "", x)
+  as.numeric(x)
+}
+```
+
+
+the old CD column is CD. my new, cleaned column is CD_clean
+```{r}
+grants1974$CD_clean = sapply(grants1974$CD, clean_num)
+grants1974$CD_clean[trimws(grants1974$CD) == ""] = "X"
+grants1974$CD_clean[is.na(grants1974$CD_clean)] = paste0("incorrect_", grants1974$CD[is.na(grants1974$CD_clean)])
+x_num = suppressWarnings(as.numeric(grants1974$CD))
+grants1974$CD_clean <- as.character(grants1974$CD)
+grants1974$CD_clean[!is.na(x_num) & x_num > 435] <-
+  paste0("incorrect_", grants1974$CD[!is.na(x_num) & x_num > 435])
+grants1974[, c("CD", "CD_clean")]
+```
+We override the old column with my new column
+```{r}
+grants1974$CD = grants1974$CD_clean
+grants1974 = grants1974 %>%  select(-c(CD_clean))
+```
+
+For region, we do something similar to CD. however, we also check if the number of characters is over 2. if it is, then the value is incorrect. usually these values were zipcodes
+```{r}
+clean_region = function(x) {
+  
+  x = as.character(x)
+  reg = regmatches(x, regexpr("\\d+", x))
+  if (length(reg) == 0 || reg == "") {
+    return("X")
+  }
+  if (nchar(reg) > 2) {
+    return("X")
+  }
+  return(as.numeric(reg))
+}
+```
+
+```{r}
+grants1974$region_clean = sapply(grants1974$region, clean_region)
+sort(table(grants1974$region_clean, useNA = "always"), decreasing = TRUE)
+```
+my new, cleaned entries are below in region_clean
+```{r}
+grants1974[, c("region", "region_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$region = grants1974$region_clean
+grants1974 = grants1974 %>%  select(-c(region_clean))
+```
+
+Again, we use fuzzy matching to clean census.population. we follow an algorithm similar to the other algorithms we used for fuzzy matching
+```{r}
+sort(table(grants1974$census.population, useNA = "always"), decreasing = TRUE)
+```
+
+```{r}
+grants1974$census.population[trimws(grants1974$census.population) == ""] = "X"
+valid_pops = c(
+  "OVER 500,000",
+  "LESS THAN 2,500",
+  "2,500-5,000",
+  "X",
+  "5,001-25,000",
+  "2,500-5,000",
+  "25,001-50,000",
+  "10,001-25,000",
+  "50,001-125,000",
+  "250,001-500,000",
+  "125,001-250,000"
+)
+
+grants1974$census.population_clean <- valid_pops[
+  amatch(grants1974$census.population, valid_pops, method = "jw", maxDist = 0.25)
+]
+
+table(grants1974$census.population_clean, useNA = "always")
+```
+my new, cleaned values are in the census.population_clean column
+```{r}
+grants1974$census.population_clean[is.na(grants1974$census.population_clean)] = paste0("incorrect_", grants1974$census.population[is.na(grants1974$census.population_clean)])
+grants1974[, c("census.population", "census.population_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$census.population = grants1974$census.population_clean
+grants1974 = grants1974 %>%  select(-c(census.population_clean))
+```
+
+We do something similar to cities for counties. however, we get our dataset of counties from the maps package, with the counties now being the keywords
+```{r}
+counties = toupper(unique(sub(".*,", "", county.fips$polyname)))
+grants1974$county[trimws(grants1974$county) == ""] = "X"
+valid_counties = c(counties, "X")
+
+grants1974$county_clean <- valid_counties[
+  amatch(grants1974$county, valid_counties, method = "jw", maxDist = 0.20)
+]
+
+sort(table(grants1974$county_clean, useNA = "always"), decreasing = TRUE)
+```
+
+my new, cleaned entries are below in county_clean
+```{r}
+grants1974$county_clean[is.na(grants1974$county_clean)] = paste0("incorrect_", grants1974$county[is.na(grants1974$county_clean)])
+grants1974[, c("county", "county_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$county = grants1974$county_clean
+grants1974 = grants1974 %>%  select(-c(county_clean))
+```
+
+for city, we still use the fuzzy matching method. however, we utilize the zipcodesr package to obtain a list of all cities in the US for matching. Thus, the keywords are now the list of cities from the package
+```{r}
+cities = unique(toupper(zip_code_db$major_city))
+grants1974$city[trimws(grants1974$city) == ""] = "X"
+valid_cities = c(cities, "X")
+
+grants1974$city_clean <- valid_cities[
+  amatch(grants1974$city, valid_cities, method = "jw", maxDist = 0.3)
+]
+
+sort(table(grants1974$city_clean, useNA = "always"), decreasing = TRUE)
+```
+
+We see my new, cleaned entries are below in the column city_clean
+```{r}
+grants1974$city_clean[is.na(grants1974$city_clean)] = paste0("incorrect_", grants1974$city[is.na(grants1974$city_clean)])
+grants1974[, c("city", "city_clean")]
+```
+
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$city = grants1974$city_clean
+grants1974 = grants1974 %>%  select(-c(city_clean))
+```
+
+as application received are dates like previous date columns, we will use a similar algorithm for award date
+```{r}
+grants1974$application.recieved[trimws(grants1974$application.recieved) == ""] = "X"
+grants1974$application.recieved_clean = sapply(grants1974$application.recieved, clean_date)
+grants1974$application.recieved_clean = as.Date(grants1974$application.recieved_clean, origin = "1970-01-01")
+grants1974$application.recieved_clean = format(grants1974$application.recieved_clean, "%m-%d-%y")
+sort(table(grants1974$application.recieved_clean, useNA = "always"), decreasing = TRUE)
+```
+
+my new, cleaned entries are below in application.recieved_clean
+```{r}
+grants1974$application.recieved_clean[is.na(grants1974$application.recieved_clean)] = paste0("incorrect_", grants1974$application.recieved[is.na(grants1974$application.recieved_clean)])
+grants1974[, c("application.recieved", "application.recieved_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$application.recieved = grants1974$application.recieved_clean
+grants1974 = grants1974 %>%  select(-c(application.recieved_clean))
+```
+
+it looks like authority is either blank or should always be PL 92-500. Will change accordingly
+```{r}
+grants1974$authority = ifelse(trimws(grants1974$authority) == "", "X", "PL 92-500")
+sort(table(grants1974$authority, useNA = "always"), decreasing = TRUE)
+```
+
+similar problem with text recognition like step. will use fuzzy matching again
+```{r}
+sort(table(grants1974$type.construction, useNA = "always"), decreasing = TRUE)
+```
+
+```{r}
+grants1974$type.construction[trimws(grants1974$type.construction) == ""] = "X"
+valid_constructs <- c(
+  "NEW FACILITY",
+  "MODIFICATION",
+  "INCREASE IN TREATMENT LEVEL",
+  "INCREASE - LEVEL & CAPACITY",
+  "INCREASE IN CAPACITY",
+  "X"
+)
+
+grants1974$type.construction_clean <- valid_constructs[
+  amatch(grants1974$type.construction, valid_constructs, method = "jw", maxDist = 0.20)
+]
+table(grants1974$type.construction_clean, useNA = "always")
+```
+my new, cleaned entries are below in the type.construction_clean column. like treat.process.type, this column had lots of problems and empty values, and we exempt it from analysis
+```{r}
+grants1974$type.construction_clean[is.na(grants1974$type.construction_clean)] = paste0("incorrect_", grants1974$type.construction[is.na(grants1974$type.construction_clean)])
+grants1974[, c("type.construction", "type.construction_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$type.construction = grants1974$type.construction_clean
+grants1974 = grants1974 %>%  select(-c(type.construction_clean))
+```
+
+same thing for treat process type. Will use fuzzy matching 
+```{r}
+sort(table(grants1974$treat.process.type, useNA = "always"), decreasing = FALSE)
+```
+
+```{r}
+grants1974$treat.process.type[trimws(grants1974$treat.process.type) == ""] = "X"
+valid_treats <- c(
+  "ACTIVATED SLUDGE TREATMENT",
+  "LAGOONS OR PONDS",
+  "TRAINING FACILITY",
+  "TRICKLING FILTERS",
+  "X"
+)
+
+grants1974$treat.process.type_clean <- valid_treats[
+  amatch(grants1974$treat.process.type, valid_treats, method = "jw", maxDist = 0.20)
+]
+table(grants1974$treat.process.type_clean, useNA = "always")
+```
+my new, cleaned entries are below in the treat.process.type_clean column. this column has lots of problems with the values despite my cleaning, so we exempt it from analysis
+```{r}
+grants1974$treat.process.type_clean[is.na(grants1974$treat.process.type_clean)] = paste0("incorrect_", grants1974$treat.process.type[is.na(grants1974$treat.process.type_clean)])
+grants1974[, c("treat.process.type","treat.process.type_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$treat.process.type = grants1974$treat.process.type_clean
+grants1974 = grants1974 %>%  select(-c(treat.process.type_clean))
+```
+
+while we have discussed the boolean columns are unreliable, we will clean them according to what we have
+```{r}
+grants1974$intercept = ifelse(grepl("X", toupper(grants1974$intercept)), "X", "---")
+sort(table(grants1974$intercept, useNA = "always"), decreasing = TRUE)
+```
+```{r}
+grants1974$pump.stat = ifelse(grepl("X", toupper(grants1974$pump.stat)), "X", "---")
+sort(table(grants1974$pump.stat, useNA = "always"), decreasing = TRUE)
+```
+```{r}
+grants1974$plant = ifelse(grepl("X", toupper(grants1974$plant)), "X", "---")
+sort(table(grants1974$plant, useNA = "always"), decreasing = TRUE)
+```
+
+From project period, we split the two dates to create two new columns: project.start and project.end. First, we merge project.period and consultant, for we can see that consultant is just a continutation of project.period that gets cut off.
+```{r}
+grants1974$project.period = ifelse(trimws(grants1974$project.period) == "", grants1974$consultant, grants1974$project.period)
+splitdate = strsplit(trimws(grants1974$project.period), split = "THRU")
+grants1974$project.start = sapply(splitdate, `[`, 1)
+grants1974$project.end = sapply(splitdate, `[`, 2)
+```
+
+with these 2 new date columns, we clean them just like we cleaned the previous date columns. No date listed is marked with an ---, whereas an empty cell is given X
+```{r}
+grants1974$project.start = trimws(grants1974$project.start)
+cleaned = gsub("\\s+", "", grants1974$project.start)
+grants1974$project.start[grants1974$project.start == ""] = NA
+dash_only = grepl("^-+$", cleaned)
+parsed = sapply(grants1974$project.start, clean_date)
+parsed = as.Date(parsed, origin = "1970-01-01")
+grants1974$project.start_clean = format(parsed, "%m-%d-%y")
+grants1974$project.start_clean[dash_only] = "---"
+grants1974$project.start_clean[is.na(grants1974$project.start_clean)] = "X"
+```
+
+my new, cleaned entries are below in the project.start_clean column
+```{r}
+grants1974[, c("project.start", "project.start_clean")]
+```
+```{r}
+grants1974$project.start = grants1974$project.start_clean
+grants1974 = grants1974 %>%  select(-c(project.start_clean))
+```
+
+now we do the same with project.end
+```{r}
+grants1974$project.end = trimws(grants1974$project.end)
+cleaned = gsub("\\s+", "", grants1974$project.end)
+grants1974$project.end[grants1974$project.end == ""] = NA
+dash_only = grepl("^-+$", cleaned)
+parsed = sapply(grants1974$project.end, clean_date)
+parsed = as.Date(parsed, origin = "1970-01-01")
+grants1974$project.end_clean = format(parsed, "%m-%d-%y")
+grants1974$project.end_clean[dash_only] = "---"
+grants1974$project.end_clean[is.na(grants1974$project.end_clean)] = "X"
+```
+
+my new, cleaned entries are below in the project.end_clean column
+```{r}
+grants1974[, c("project.end", "project.end_clean")]
+```
+our cleaning was successful, so we override the old column with my new column
+```{r}
+grants1974$project.end = grants1974$project.end_clean
+grants1974 = grants1974 %>%  select(-c(project.end_clean))
+```
+
+now that we are done cleaning the file, we save in our project file
+```{r}
+write.xlsx(grants1974, "1974progress3.xlsx")
+getwd()
+```
+
+
+these edits take place after going through the cleaned excel file and filling in all entries for state. we now validate the entries obtained in the city column. we do this through verifying the city in the original city column is part of the state it is in. if it isn't, it is marked as incorrect. if it is, the city is left the same
+```{r}
+tempdf = read.csv("1974progress1 - Sheet 1.csv", header = TRUE)
+```
+
+```{r}
+tempdf$city_clean <- toupper(trimws(tempdf$city))
+tempdf$state_clean <- toupper(trimws(tempdf$state))
+tempdf$city_clean[tempdf$city_clean == ""] <- "X"
+tempdf$state_validation <- tempdf$state_clean
+tempdf$state_validation[
+  tempdf$state_validation == "NB"
+] <- "NE"
+
+city_state_ref <- unique(
+  rbind(
+    data.frame(
+      city = toupper(trimws(zip_code_db$major_city)),
+      state = toupper(trimws(zip_code_db$state))
+    ),
+    data.frame(
+      city = toupper(trimws(zip_code_db$post_office_city)),
+      state = toupper(trimws(zip_code_db$state))
+    )
+  )
+)
+
+city_state_ref <- city_state_ref[
+  !is.na(city_state_ref$city) &
+    city_state_ref$city != "",
+]
+
+
+
+valid_pair <- paste(
+  tempdf$city_clean,
+  tempdf$state_validation
+) %in% paste(
+  city_state_ref$city,
+  city_state_ref$state
+)
+
+
+tempdf$city_clean[
+  !valid_pair &
+  tempdf$city_clean != "X"
+] <- paste0(
+  "incorrect_",
+  tempdf$city[
+    !valid_pair &
+    tempdf$city_clean != "X"
+  ]
+)
+
+tempdf$state_validation <- NULL
+```
+
+```{r}
+tempdf[, c("city", "city_clean")]
+```
+
+```{r}
+tempdf$city = tempdf$city_clean
+tempdf = tempdf %>%  select(-c(city_clean))
+```
+
+we are now officially done making edits for the spreadsheet in R. as we did a very general cleaning, we still need to go into the spreadsheet and manually fix values. we continue this below after downloading our finished product
+```{r}
+write.xlsx(tempdf, "1974complete1.xlsx")
+getwd()
+```
+

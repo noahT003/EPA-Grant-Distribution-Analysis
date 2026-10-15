@@ -1,0 +1,50 @@
+---
+title: "addgrantnumbers"
+author: "Noah Thomas"
+date: "2026-07-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+necessary libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(openxlsx)
+```
+
+load in gis master file data (so far)
+```{r}
+gismaster2 = read.csv("gisspreadsheet.csv", header = TRUE, colClasses = c(ZIP_code_GIS = "character"))
+uniques = read.csv("uniquecitystatezip.csv")
+```
+
+we create a new column citystatezip, that shows each grants city, state, and zip in one string
+```{r}
+gismaster2$citystate = paste(gismaster2$city_GIS, gismaster2$state_GIS, sep = ", ")
+gismaster2$citystatezip = paste(gismaster2$citystate, gismaster2$ZIP_code_GIS, sep = ", ")
+```
+
+we now connect each unique combo to their respective grant numbers. then we merge so that grant numbers are displayed on the unique combo file
+```{r}
+grant_lookup = gismaster2 %>%
+  group_by(citystatezip) %>%
+  summarize(
+    grant_number = paste(grant_number, collapse = ", "),
+    .groups = "drop"
+  )
+
+uniques = uniques %>%
+  left_join(grant_lookup, by = "citystatezip")
+```
+
+our dataframe now has the content we need, so we download and observe results in sheets
+```{r}
+write.xlsx(uniques, "realuniquecitystatezips2.xlsx")
+getwd()
+```

@@ -1,0 +1,50 @@
+---
+title: "addlatlongcombo"
+author: "Noah Thomas"
+date: "2026-07-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+necessary libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(openxlsx)
+```
+
+load in gis master file data (so far)
+```{r}
+gismaster3 = read.csv("mastergis3.csv", header = TRUE, colClasses = c(ZIP_code_GIS = "character"))
+uniques2 = read.csv("uniquewnums.csv")
+```
+
+we create a new column citystatezip, that shows each grants city, state, and zip in one string
+```{r}
+gismaster3$citystate = paste(gismaster3$city_GIS, gismaster3$state_GIS, sep = ", ")
+gismaster3$citystatezip = paste(gismaster3$citystate, gismaster3$ZIP_code_GIS, sep = ", ")
+```
+
+```{r}
+locations_long = uniques2 %>%
+  separate_rows(grant_number, sep = ",\\s*")
+```
+
+```{r}
+gismaster3 <- gismaster3 %>%
+  left_join(
+    locations_long %>%
+      select(grant_number, Latitude, Longitude),
+    by = "grant_number"
+  )
+```
+our dataframe now has the content we need, so we download and observe results in sheets
+```{r}
+write.xlsx(gismaster3, "biggismaster.xlsx")
+getwd()
+```

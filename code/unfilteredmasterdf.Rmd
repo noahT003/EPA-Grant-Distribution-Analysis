@@ -1,0 +1,101 @@
+---
+title: "combined file"
+author: "Noah Thomas"
+date: "2026-07-14"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+reading in files. this rmd file is very similar to the start of the data analysis file. however, the purpose of this file is to combine the spreadsheets as is and create a true, untouched master file. we dont remove any entries (ex: september 1977) in this file, and is meant to be a file for those who want to see everything combined in a raw form. our additional variables, like days_between, are not present in this file
+```{r}
+grants1974 = read.csv("1974cleaned - Sheet 1.csv", header = TRUE)
+grants1975 = read.csv("1975cleaned - Sheet 1.csv", header = TRUE)
+grants1976 = read.csv("1976cleaned - Sheet 1.csv", header = TRUE)
+grants1977 = read.csv("1977cleaned - Sheet 1.csv", header = TRUE)
+grants1978 = read.csv("1978cleaned - Sheet 1.csv", header = TRUE)
+grants1979 = read.csv("1979cleaned - Sheet 1.csv", header = TRUE)
+grants1980 = read.csv("1980cleaned - Sheet 1.csv", header = TRUE)
+```
+
+we also add a year column to the 1980 file, since it wasnt included when we initially cleaned it
+```{r}
+grants1980$year = 1980
+```
+
+
+we then change the "---"s to NAs to make analysis easier
+```{r}
+grants1974[(grants1974 == "---") | (grants1974 == "X")] = NA
+grants1975[(grants1975 == "---") | (grants1975 == "X")] = NA
+grants1976[(grants1976 == "---") | (grants1976 == "X")] = NA
+grants1977[(grants1977 == "---") | (grants1977 == "X")] = NA
+grants1978[(grants1978 == "---") | (grants1978 == "X")] = NA
+grants1979[(grants1979 == "---") | (grants1979 == "X")] = NA
+grants1980[(grants1980 == "---") | (grants1980 == "X")] = NA
+```
+
+we then change the money columns to actual numbers so they can be analyzed. actual values are not changed
+```{r}
+smallgrants1974 = smallgrants1974 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1975 = smallgrants1975 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1976 = smallgrants1976 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1977 = smallgrants1977 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1978 = smallgrants1978 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1979 = smallgrants1979 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1980 = smallgrants1980 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+```
+
+we rename columns in 1976 so we can combine into a master file
+```{r}
+smallgrants1976 = smallgrants1976 %>% rename(
+  month = Month,
+  grant.number = Grant.Number,
+  year = Year
+)
+```
+
+we also convert all regions to characters
+```{r}
+grants1975$region = as.character(grants1975$region)
+grants1978$region = as.character(grants1978$region)
+grants1979$region = as.character(grants1979$region)
+grants1980$region = as.character(grants1980$region)
+```
+
+additional.code is not a necessary column. we remove it from all the files below
+```{r}
+grants1974 = grants1974 %>%  select(-c(additional.code..not.updated.))
+grants1976 = grants1976 %>%  select(-c(additional.code))
+grants1977 = grants1977 %>%  select(-c(additional.code))
+grants1978 = grants1978 %>%  select(-c(additional.code))
+grants1979 = grants1979 %>%  select(-c(additional.code))
+grants1980 = grants1980 %>%  select(-c(additional.code))
+```
+
+
+```{r}
+unfilteredmasterdf = bind_rows(grants1974, grants1975, grants1976, grants1977, grants1978, grants1979, grants1980)
+```
+
+we extract the unfiltered master df. will be used for storage purposes
+```{r}
+write.xlsx(unfilteredmasterdf, "unfilteredmasterdf.xlsx")
+getwd()
+```

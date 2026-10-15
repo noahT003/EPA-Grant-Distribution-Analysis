@@ -1,0 +1,1067 @@
+---
+title: "grantsdatanalaysis"
+author: "Noah Thomas"
+date: "2026-06-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+necessary libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(openxlsx)
+library(stringdist)
+library(maps)
+library(zipcodeR)
+library(Polychrome)
+library(scales)
+```
+
+reading in files
+```{r}
+grants1974 = read.csv("1974cleaned - Sheet 1.csv", header = TRUE)
+grants1975 = read.csv("1975cleaned - Sheet 1.csv", header = TRUE)
+grants1976 = read.csv("1976cleaned - Sheet 1.csv", header = TRUE)
+grants1977 = read.csv("1977cleaned - Sheet 1.csv", header = TRUE)
+grants1978 = read.csv("1978cleaned - Sheet 1.csv", header = TRUE)
+grants1979 = read.csv("1979cleaned - Sheet 1.csv", header = TRUE)
+grants1980 = read.csv("1980cleaned - Sheet 1.csv", header = TRUE)
+```
+
+we also add a year column to the 1980 file, since it wasnt included when we initially cleaned it
+```{r}
+grants1980$year = 1980
+```
+
+we compress the dataframes we are looking at to only the variables we are interested in
+```{r}
+smallgrants1974 = grants1974[, c("month", "year", "grant.number", "grant.type", "award.amount", "eligible.cost", "award.date", "application.recieved", "city", "county", "state", "ZIP.code", "region", "census.population")]
+smallgrants1975 = grants1975[, c("month", "year", "grant.number", "grant.type", "award.amount", "eligible.cost", "award.date", "application.recieved", "city", "county", "state", "ZIP.code", "region", "census.population")]
+smallgrants1976 = grants1976[, c("Month", "Year", "Grant.Number", "grant.type", "award.amount", "eligible.cost", "award.date", "application.recieved", "city", "county", "state", "ZIP.code", "region", "census.population")]
+smallgrants1977 = grants1977[, c("month", "year", "grant.number", "grant.type", "award.amount", "eligible.cost", "award.date", "application.recieved", "city", "county", "state", "ZIP.code", "region", "census.population")]
+smallgrants1978 = grants1978[, c("month", "year", "grant.number", "grant.type", "award.amount", "eligible.cost", "award.date", "application.recieved", "city", "county", "state", "ZIP.code", "region", "census.population")]
+smallgrants1979 = grants1979[, c("month", "year", "grant.number", "grant.type", "award.amount", "eligible.cost", "award.date", "city", "county", "state", "ZIP.code", "region", "census.population")]
+smallgrants1980 = grants1980[, c("month", "year", "grant.number", "grant.type", "award.amount", "eligible.cost", "award.date", "city", "county", "state", "ZIP.code", "region", "census.population")]
+```
+
+we also remove september from 1977 due to problems in the file
+```{r}
+smallgrants1977 = smallgrants1977[smallgrants1977$month != "September", ]
+```
+
+we then change the "---"s to NAs to make analysis easier
+```{r}
+smallgrants1974[(smallgrants1974 == "---") | (smallgrants1974 == "X")] = NA
+smallgrants1975[(smallgrants1975 == "---") | (smallgrants1975 == "X")] = NA
+smallgrants1976[(smallgrants1976 == "---") | (smallgrants1976 == "X")] = NA
+smallgrants1977[(smallgrants1977 == "---") | (smallgrants1977 == "X")] = NA
+smallgrants1978[(smallgrants1978 == "---") | (smallgrants1978 == "X")] = NA
+smallgrants1979[(smallgrants1979 == "---") | (smallgrants1979 == "X")] = NA
+smallgrants1980[(smallgrants1980 == "---") | (smallgrants1980 == "X")] = NA
+```
+
+we then change the money columns to actual numbers so they can be analyzed. actual values are not changed
+```{r}
+smallgrants1974 = smallgrants1974 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1975 = smallgrants1975 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1976 = smallgrants1976 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1977 = smallgrants1977 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1978 = smallgrants1978 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1979 = smallgrants1979 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+smallgrants1980 = smallgrants1980 %>%
+  mutate(across(c(award.amount, eligible.cost),
+                ~as.numeric(gsub("[$,]", "", .))))
+```
+we also add a new variable called days_between. this calculates the amount of days between award date and application recieved date. does not apply to 1979 since no application recieved date exists
+```{r}
+smallgrants1974 = smallgrants1974 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y"),
+    application.recieved = as.Date(application.recieved, format = "%m-%d-%y"),
+    days_between = as.numeric(award.date - application.recieved)
+  )
+smallgrants1975 = smallgrants1975 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y"),
+    application.recieved = as.Date(application.recieved, format = "%m-%d-%y"),
+    days_between = as.numeric(award.date - application.recieved)
+  )
+smallgrants1976 = smallgrants1976 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y"),
+    application.recieved = as.Date(application.recieved, format = "%m-%d-%y"),
+    days_between = as.numeric(award.date - application.recieved)
+  )
+smallgrants1977 = smallgrants1977 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y"),
+    application.recieved = as.Date(application.recieved, format = "%m-%d-%y"),
+    days_between = as.numeric(award.date - application.recieved)
+  )
+smallgrants1978 = smallgrants1978 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y"),
+    application.recieved = as.Date(application.recieved, format = "%m-%d-%y"),
+    days_between = as.numeric(award.date - application.recieved)
+  )
+smallgrants1979 = smallgrants1979 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y")
+  )
+smallgrants1980 = smallgrants1980 %>%
+  mutate(
+    award.date = as.Date(award.date, format = "%m-%d-%y")
+  )
+```
+
+
+some negative values are present. while it is possible i do not think it would be beneficial for our analysis, so these values are turned into NAs
+```{r}
+smallgrants1974$days_between[smallgrants1974$days_between < 0] = NA
+smallgrants1975$days_between[smallgrants1975$days_between < 0] = NA
+smallgrants1976$days_between[smallgrants1976$days_between < 0] = NA
+smallgrants1977$days_between[smallgrants1977$days_between < 0] = NA
+smallgrants1978$days_between[smallgrants1978$days_between < 0] = NA
+```
+
+due to similarities in content, i also create a master dataframe with all content. I will switch between this dataframe and individual year dataframes for analysis. before this i rename the columns in 1976 since they have caps
+```{r}
+smallgrants1976 = smallgrants1976 %>% rename(
+  month = Month,
+  grant.number = Grant.Number,
+  year = Year
+)
+```
+
+we also convert all regions to characters
+```{r}
+smallgrants1975$region = as.character(smallgrants1975$region)
+smallgrants1978$region = as.character(smallgrants1978$region)
+smallgrants1979$region = as.character(smallgrants1979$region)
+smallgrants1980$region = as.character(smallgrants1980$region)
+```
+
+
+```{r}
+masterdf = bind_rows(smallgrants1974, smallgrants1975, smallgrants1976, smallgrants1977, smallgrants1978, smallgrants1979, smallgrants1980)
+```
+
+
+first we analyze the different money amounts for award amount given. we look at medians since the money values vary so heavily, making medians less biased
+```{r}
+summary(smallgrants1974$award.amount)
+summary(smallgrants1975$award.amount)
+summary(smallgrants1976$award.amount)
+summary(smallgrants1977$award.amount)
+summary(smallgrants1978$award.amount)
+summary(smallgrants1979$award.amount)
+summary(smallgrants1980$award.amount)
+summary(masterdf$award.amount)
+```
+now we do the same for eligible cost. they should be linked
+```{r}
+summary(smallgrants1974$eligible.cost)
+summary(smallgrants1975$eligible.cost)
+summary(smallgrants1976$eligible.cost)
+summary(smallgrants1977$eligible.cost)
+summary(smallgrants1978$eligible.cost)
+summary(smallgrants1979$eligible.cost)
+summary(smallgrants1980$eligible.cost)
+summary(masterdf$eligible.cost)
+```
+stories mostly align; the higher the eligible cost, the higher the award amount. however, it doesnt look to be 1 to 1, since 1974 on average recieved higher award amounts but 1979 recieved higher eligible costs. note that 1974 isnt completely cleaned at this moment
+
+now we compare the days between award date and application recieved date
+```{r}
+summary(smallgrants1974$days_between)
+summary(smallgrants1975$days_between)
+summary(smallgrants1976$days_between)
+summary(smallgrants1977$days_between)
+summary(smallgrants1978$days_between)
+summary(masterdf$days_between)
+```
+days between looked to mostly increase over time, which is interesting
+
+below we look at states appearances / how much grants states got overall
+```{r}
+sort(table(masterdf$state, useNA = "always"), decreasing = TRUE)
+```
+we can see the states that got the most grants were california, michigan, illinois, and texas. these are large, populated states that i wouldnt consider rural so this makes sense. smaller, more rural states are on the bottom like arkansas, rhode island, and wyoming. thus, larger and more populated states ended up getting more grants
+
+
+Now we comparing the money variables for each region to answer the question (Are there particular epa regions that are receiving more resources than others).  we first filter out the ones that are uncleaned
+```{r}
+masterdf$region = as.numeric(masterdf$region)
+masterdf$region[(masterdf$region > 10) | (masterdf$region < 1)] = NA
+```
+
+
+```{r}
+region_summary = masterdf %>%
+  group_by(region) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsd = sd(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsd = sd(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE)
+  )
+region_summary
+```
+we can see grants in region 2 got about $260,000 in award amount on average. this is the highest per grant average for award amount. we can see region 2 is made up by just the state of New york, so this is most likely dominated by NYC. same story for eligible cost. however, for sum, this is a different story; the total amount of money poured into award amount in region 5 is the largest. i believe this is due to the sheer amount of grants in that region, for it has the largest amount of grants and outstrips the second most by 1000. we can see illinois and michigan are in this region, which makes sense since they are in the top 4 for most grants. it is worthy to note for median that region 2 has a rather high variance. in fact, the only region whos per grant average is higher than 100,000 who has a 7 digit variance is region 1. so it is possibly even worthy to say that region 1 is more consistent with higher awards
+
+As the median is the most important, i graph it below
+```{r}
+region_summary$highlight = ifelse(region_summary$region == 2,
+                                   "Highlight", "Other")
+region_summary$highlight2 = ifelse(region_summary$region == 5,
+                                   "Highlight", "Other")
+```
+
+```{r}
+ggplot(na.omit(region_summary), aes(x = factor(region), y = AAmedian, fill = highlight)) +
+  geom_col(color = "black") + xlab("Region") + ylab("Average Award Amount Per Grant") + ggtitle("Region 2 Looks to Get the Most Financial Resources\n Per Grant Compared to the Other Regions") + theme_bw() + scale_y_continuous(limits = c(0, 275000), breaks = c(0, 50000, 100000, 150000, 200000, 250000, 300000), labels = c("$0", "$50,000","$100,000", "$150,000", "$200,000", "$250,000", "$300,000")) + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+i also do sum for funsies
+
+```{r}
+ggplot(na.omit(region_summary), aes(x = factor(region), y = AAsum, fill = highlight2)) +
+  geom_col(color = "black") + xlab("Region") + ylab("Total Money Given For\n All Grants in Award Amount") + ggtitle("Region 5 Looks to Get the Most Financial Resources Overall") + theme_bw() + scale_y_continuous(limits = c(0, 5000000000), breaks = c(0, 1000000000, 2000000000, 3000000000, 4000000000, 5000000000), labels = c("$0", "$1,000,000,000", "$2,000,000,000", "$3,000,000,000", "$4,000,000,000", "$5,000,000,000")) + scale_fill_manual(values = c("Highlight" = "red",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+i also graph amount of grants for each region below
+```{r}
+ggplot(na.omit(region_summary), aes(x = factor(region), y = n, fill = highlight2)) +
+  geom_col(color = "black") + xlab("Region") + ylab("Amount of Grants") + ggtitle("Region 5's Plentiful Financial Resouces Most\nLikely Come From the Amount of Grants it Gets") + theme_bw() + scale_y_continuous(limits = c(0, 4000), breaks = c(0, 500,1000,1500,2000,2500,3000,3500,4000)) + scale_fill_manual(values = c("Highlight" = "red",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+
+
+to continue exploring the question of did certain regions get more resources / help than others, we will look at days between. this would show whether certain regions got help quicker than others
+```{r}
+region_summary2 = masterdf %>%
+  group_by(region) %>%
+  summarise(
+    n = n(),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsd = sd(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE),
+  )
+region_summary2
+```
+we can see many patterns - medians and means arent 1 to 1. there seems to be a lot of variance; regions had some real low lows and real high highs. nonetheless, the distribution for each region is skewed right and we look at medians as the center. Grants in region 9 wait for 19 days on average, being the lowest wait. region 3 has the longest wait time on average. Region 9 is CA and NV, so it makes sense that one of the wealthiest regions and the state that has the most grants has the lowest wait time. i am unsure of the reason for 9.
+
+A visualization for the median days between is below
+```{r}
+region_summary2$highlight3 = ifelse(region_summary$region == 9,
+                                   "Highlight", "Other")
+```
+
+```{r}
+ggplot(na.omit(region_summary2), aes(x = factor(region), y = DAYmedian, fill = highlight3)) +
+  geom_col(color = "black") + xlab("Region") + ylab("Average Days Between Application Recieved Date\n and Award Date for Each Grant") + ggtitle("Region 9 Had to Wait the Least Amount of Time\n to Get their Grant Money On Average") + theme_bw() + scale_y_continuous(limits = c(0, 150), breaks = c(0, 25, 50, 75, 100, 125, 150), labels = c("0", "25", "50", "75", "100", "125", "150")) + scale_fill_manual(values = c("Highlight" = "red",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+looking at the the median AA and median days between, region 2 is the best in the former and region 9 is the best in the ladder. Since they are the regions comprised of new york state and california respectively, i think it would be an accurate assertion that the regions with more money / people would recieve better treatment. we explore census population after this. Also lookign at median AA, the regions that get the lowest average grant money look to be 6, 7, 8. these regions comprise the mid US. i find this surprising since Texas looked to be one of the regions with the most grants. we explore these relationships soon.
+
+here we look at the relationship between region and population
+```{r}
+table(masterdf$region, masterdf$census.population)
+```
+We can see that regions 2 and 9 are some of the regions with the least amount of locations with a population of less than 2,500/3,500. they also have consistently high numbers of grants in cities with higher populations (>50,000), though they always arent the best. this backs up my previous hypothesis, that regions with higher populations got more support. we can see the mid regions like 6 and 7 have high amounts of low populated regions. (about 65% of grant locations in region 7 have a population of under 2,500/3,500) this also backs up my assertion.
+
+With this, i assert that the locations with higher populations get more support. I explore this below. 
+first, due to how specific i was during the cleaning process, i generalize the results below for census population so analysis is more straightforward
+
+```{r}
+counts = table(masterdf$census.population)
+masterdf$census.population[masterdf$census.population %in% names(counts[counts < 10])] = NA
+
+masterdf$census.population[masterdf$year == 1980] = NA
+```
+
+```{r}
+pop_summary = masterdf %>%
+  group_by(census.population) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsd = sd(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsd = sd(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE)
+  )
+pop_summary
+```
+my assertion looks to be correct; the higher populated locations got more money overall. 
+In terms of number of grants, it looks as though it is the opposite; the locations that had the most grants was the lowest populated ones
+```{r}
+ggplot(na.omit(pop_summary), aes(y = factor(census.population, levels = c("OVER 500,000", "250,001-500,000", "125,001-250,000", "50,001-125,000","25,001-50,000", "10,001-25,000", "5,001-25,000", "5,001-10,000", "3,500-5,000", "2,500-5,000", "LESS THAN 3,500", "LESS THAN 2,500")), x = AAmedian, fill = highlight2)) +
+  geom_col(color = "black") + xlab("Average Award Amount Per Grant") + ylab("Census Population Groups") + ggtitle("More Populated Locations Look\nto Get Greater Amounts of Money On Average") + theme_bw() + scale_x_continuous(limits = c(0, 1250000), breaks = c(0, 250000, 500000, 750000, 1000000, 1250000), labels = c("$0", "$250,000", "$500,000", "$750,000", "$1,000,000", "$1,250,000")) + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+```{r}
+ggplot(na.omit(pop_summary), aes(y = factor(census.population, levels = c("OVER 500,000", "250,001-500,000", "125,001-250,000", "50,001-125,000","25,001-50,000", "10,001-25,000", "5,001-25,000", "5,001-10,000", "3,500-5,000", "2,500-5,000", "LESS THAN 3,500", "LESS THAN 2,500")), x = n, fill = highlight3)) +
+  geom_col(color = "black") + xlab("Amount of Grants") + ylab("Census Population Groups") + ggtitle("Less Populated Locations Look to Get\nGreater Amounts of Grants On Average") + theme_bw() + scale_x_continuous(limits = c(0, 5500), breaks = c(0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500)) + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+thus, we have the relationship the lower populated locations get more grants, whereas higher populated locations get more money per grant on average. i graph the sum below out of curiosity
+
+```{r}
+pop_summary$highlight = ifelse(((pop_summary$census.population == "OVER 500,000") | (pop_summary$census.population == "LESS THAN 2,500")),
+                                   "Highlight", "Other")
+pop_summary$highlight2 = ifelse(((pop_summary$census.population == "OVER 500,000")),
+                                   "Highlight", "Other")
+pop_summary$highlight3 = ifelse(((pop_summary$census.population == "LESS THAN 2,500")),
+                                   "Highlight", "Other")
+```
+
+```{r}
+ggplot(na.omit(pop_summary), aes(y = factor(census.population, levels = c("OVER 500,000", "250,001-500,000", "125,001-250,000", "50,001-125,000","25,001-50,000", "10,001-25,000", "5,001-25,000", "5,001-10,000", "3,500-5,000", "2,500-5,000", "LESS THAN 3,500", "LESS THAN 2,500")), x = AAsum, fill = highlight)) +
+  geom_col(color = "black") + xlab("Total Award Amount for All Grants") + ylab("Census Population Groups") + ggtitle("Total Award Amount for Each Census Population\nGroup Across All Grants") + theme_bw() + scale_x_continuous(limits = c(0, 4000000000), breaks = c(0, 1000000000, 2000000000, 3000000000, 4000000000), labels = c("$0", "$1,000,000,000", "$2,000,000,000", "$3,000,000,000", "$4,000,000,000")) + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) +
+  theme(legend.position = "none", plot.margin = margin(5.5, 20, 5.5, 5.5))
+```
+now, like for regions, i look at the days between award date and application recieved date
+```{r}
+pop_summary2 = masterdf %>%
+  group_by(census.population) %>%
+  summarise(
+    n = n(),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsd = sd(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE),
+  )
+pop_summary2
+```
+
+```{r}
+ggplot(na.omit(pop_summary2), aes(y = reorder(census.population, -DAYmedian), x = DAYmedian)) +
+  geom_col(color = "black") + xlab("Region") + ylab("Average Days Between Application Recieved Date\n and Award Date for Each Grant") + ggtitle("Locations of all Populations Tended to Have\n A Similar Wait Time for Grant Money On Average") + theme_bw() + scale_x_continuous(limits = c(0, 100), breaks = c(0, 20, 40, 60, 80, 100))
+```
+all locations tended to have a similar wait time. thus, it is likely that certain locations did not get better treatment on purpose. however, we know for sure that higher populated cities got more money in total and on average, even if lower populated locations got more grants.
+
+now, i want to analyze if number of grants and amount of money given census population over time differ.
+
+first i look at differences in regions over the years
+
+```{r}
+yearregiontable = masterdf %>%
+  filter(!is.na(year), !is.na(region)) %>%
+  group_by(year, region) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    .groups = "drop"
+  )
+yearregiontable
+```
+
+we see region 2 mostly dominates from 1975 - 1977. however, it looks to be one of the only
+regions to have a overall decrease in award amount. region 9 had an increase. while regions 6,7,8 were rather low and varied between years, i think it is best to say they increased overall. We can see that 1979 looks to bea sort of outlier year in that much more money was given out to every region overall. we see if this pattern holds below
+
+
+```{r}
+yearpoptable = masterdf %>%
+  filter(!is.na(year), !is.na(census.population)) %>%
+  group_by(year, census.population) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    .groups = "drop"
+  )
+yearpoptable
+```
+
+```{r}
+tableau_light <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#FF9D9A",
+  "#D4A6C8", "#D7B5A6", "#B6992D", "#86BCB6",
+  "#FABFD2", "#D4A6A6", "#CFCFCF", "#C7E9C0"
+)
+
+blue_theme <- c(
+  "#4E79A7", # blue
+  "#76B7B2", # teal
+  "#59A14F", # green
+  "#9C755F", # brown
+  "#B07AA1", # purple
+  "#E15759", # muted red
+  "#F28E2B", # orange
+  "#EDC948", # mustard
+  "#86BCB6", # aqua
+  "#7F9BCF", # periwinkle
+  "#A0CBE8", # light blue
+  "#C6DBEF"  # pale blue
+)
+
+ggplot(yearpoptable,
+       aes(x = year, y = AAmedian, color = census.population, group = census.population)) + geom_line(linewidth = 1.2) + geom_point(size = 2) + theme_bw() + scale_color_manual(values = tableau_light) + xlab("Year") + ylab("Average Award Amount Per Grant") + labs(color = "Census Population") + ggtitle("Average Award Amount Per Grant\n For Each Population Group Throughout the Years") + scale_y_continuous(limits = c(0, 2000000), breaks = c(0, 500000, 1000000, 1500000, 2000000), labels = c("$0", "$500,000", "$1,000,000", "$1,500,000", "$2,000,000"))
+```
+Many stories can be taken from this graph. Firstly, we can see that 1975, 1977, and 1979 are down years; most population groups looked to decrease in these years. While there are a few outliers, the most significant would be the 250,001-500,000 group in 1979, for it had a huge increase. this is most likely why overall averages for 1979 for award amount are higher, since there were numerous locations in this group across all regions. Conversely, we see 1976 and 1978 are up years, and most all groups had an increase in average award amount per grant. For the groups themselves, we first look at the ones that remained on the bottom. while they didnt really move that much, we can see a steady increase from year to year. The next group would be 25,001-50,000 and 50,001-125,000 (red and pink). while they both experienced increases in 1977, they ended up decreasing to almost what they were in 1974 in 1979. however, they are still a step above the bottom group. THe line above is 125,001-250,000. due to 1974 being not completely cleaned yet, i refrain from talking about it. Similar to 25,001-125,000, this group experienced a sharp increase ans then a decrease in 1979. while it did end up increasing overall, it was not by much but it was over the other groups. Next, there was 250,001-500,000. this group was the most varied by year, the average award amount tanked in 1977 but shot right back up to where it was in 1976 in 1978. it then increases in 1979 to become the population group with the highest award amounts given per grant on average. Finally, there is the over 500,000, which was much more consistent than the previosu group. it was consistently the highest (except for 1979) and had an overall increase. Ultimately, we can see that throughout every year, the pattern that the higher population, the more the average award amount, holds. every population group was rather consistent, except for 250,001-500,000.
+
+
+below is a similar line graph, but for amount of grants given.
+
+```{r}
+ggplot(yearpoptable,
+       aes(x = year, y = n, color = census.population, group = census.population)) + geom_line(linewidth = 1.2) + geom_point(size = 2) + theme_bw() + scale_color_manual(values = tableau_light) + xlab("Year") + ylab("Amount of Grants Given") + labs(color = "Census Population") + ggtitle("Amount of Grants for Each Population Group Follow Similar Patterns") + scale_y_continuous(limits = c(0, 2000), breaks = c(0, 500, 1000, 1500, 2000))
+```
+We can see many of the lines above are parabolic; this makes sense, for 1976 had the most grants of any year. We can still see the overall pattern holds, in that LESS THAN 2,500/3,500 had the most grants signed whereas the higher populated locations had less grants. many lines are consistent in that they act as a parabola and then increase in 1979 and many do not surpass one another. however,i find it rather interesting that 5,001-10,000 and 10,001-25,000 are roughly equal and become 2 of the 3 highest groups 1978 forward.
+
+```{r}
+ggplot(yearpoptable,
+       aes(x = year, y = AAsum, color = census.population, group = census.population)) + geom_line(linewidth = 1.2) + geom_point(size = 2) + theme_bw() + scale_color_manual(values = tableau_light) + xlab("Year") + ylab("Total Award Amount for All Grants in the Year") + labs(color = "Census Population") + ggtitle("Total Award Amount in the Year For Each\n Population Group Throughout the Years") + scale_y_continuous(limits = c(0, 1000000000), breaks = c(0, 200000000, 400000000, 600000000, 800000000, 1000000000), labels = c("$0", "$200,000,000", "$400,000,000", "$600,000,000", "$800,000,000", "$1,000,000,000"))
+```
+
+
+below we look at wait times throughout the years
+```{r}
+yearpoptable2 = masterdf %>%
+  filter(!is.na(year), !is.na(census.population)) %>%
+  group_by(year, census.population) %>%
+  summarise(
+    n = n(),
+    DAYSmedian = median(days_between, na.rm = TRUE),
+    AAsum = sum(days_between, na.rm = TRUE),
+    .groups = "drop"
+  )
+yearpoptable2
+```
+
+```{r}
+ggplot(yearpoptable2,
+       aes(x = year, y = DAYSmedian, color = census.population, group = census.population)) + geom_line(linewidth = 1.2) + geom_point(size = 2) + theme_bw() + scale_color_manual(values = tableau_light) + xlab("Year") + ylab("Average Days Between Application Recieved Date\n and Award Date for Each Grant") + labs(color = "Census Population") + ggtitle("Wait Times for Each Population Group Throughout the Years") 
+```
+We see many groups follow the pattern of increasing in 1975 and then decreasing in 1976 and 1977 and then increasing again in 1978. Since the beginning, it is fair to say that the time between application received and award date has increased. The outlier in this is the OVER 500,000 group; it is the only group to consistently decrease outside of 1975. Due to this and the fact that it is undoubtedly received the most money despite how little grants it got, I think there is reason to believe this group got more priority over others
+
+Now i compare rural vs urban regions. I classify the rural regions as 7, 8, and 10 and the urban regions as 1, 2, and 9. Some could also be classified as rural/urban, such as 5 and 6, but I believe it is more so mixed in those regions. We set up our analysis below.
+```{r}
+regionlist = c("1","2","7","8","9","10")
+regiondf = masterdf[masterdf$region %in% regionlist, ]
+
+regiondf$classified = ifelse(((regiondf$region == "7") | (regiondf$region == "10") | (regiondf$region == "8")),"Rural", "Urban")
+```
+
+```{r}
+regionpop = regiondf %>%
+  group_by(classified) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsd = sd(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsd = sd(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsd = sd(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+regionpop
+```
+
+```{r}
+ggplot(na.omit(regionpop), aes(x = classified, y = AAmedian, fill = classified)) +
+  geom_col(color = "black") + xlab("Settlement Pattern") + ylab("Average Award Amount Per Grant") + ggtitle("Urban Regions Get Much More Money\nCompared to Rural Regions on Average") + theme_bw() + scale_y_continuous(limits = c(0, 200000), breaks = c(0, 50000, 100000, 150000, 200000), labels = c("$0", "$50,000", "$100,000", "$150,000", "$200,000")) + geom_text(aes(label = dollar(AAmedian), color = classified), position = position_dodge(width = 0.9), vjust = -0.3, fontface= "bold", size = 5) + scale_color_manual(values = c("gray35", "steelblue2")) + scale_fill_manual(values = c("gray35", "steelblue2")) + theme(text = element_text(size = 13), legend.position = "none")
+```
+```{r}
+ggplot(na.omit(regionpop), aes(x = classified, y = n, fill = classified)) +
+  geom_col(color = "black") + xlab("Settlement Pattern") + ylab("Number of Grants") + ggtitle("Rural Regions Get More Grants\nThan Urban Regions On Average") + theme_bw() + scale_y_continuous(limits = c(0, 5000), breaks = c(0, 1000, 2000, 3000, 4000, 5000)) + geom_text(aes(label = n, color = classified), position = position_dodge(width = 0.9), vjust = -0.3, fontface= "bold", size = 6) + scale_color_manual(values = c("gray35", "steelblue2")) + scale_fill_manual(values = c("gray35", "steelblue2")) + theme(text = element_text(size = 13), legend.position = "none")
+```
+patterns we uncovered before are consistent with urban vs rural: more populated, urban locations get much more money, and less populated, rural locations get a little more grants. Days between is also roughly similar for both groups
+
+Now we carry out a case study for specific states. I choose 5 states: California, Pennsylvania, Texas, Minnesota, and Illinois.
+
+```{r}
+statelist = c("PA","TX","CA","MN","IL")
+statedf = masterdf[masterdf$state %in% statelist, ]
+```
+
+```{r}
+statepop = statedf %>%
+  group_by(state) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsd = sd(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsd = sd(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsd = sd(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+statepop
+```
+interesting results.i thought CA would have the highest AA average but its PA... i am not entirely sure why but i think it has to do with CA having over 1000 grants and PA having only 400, making it much more susceptible to extreme values. FOr days between, this is the opposite, with california having a very small median and PA having a large median. i am unsure why this is the case. I graph my results for AA average and days between below.
+
+```{r}
+statepop$highlight = ifelse(statepop$state == "PA", "Highlight", "Other")
+
+ggplot(na.omit(statepop), aes(x = state, y = AAmedian, fill = highlight)) +
+  geom_col(color = "black") + xlab("State") + ylab("Average Award Amount Per Grant") + ggtitle("Pennsylvania Outstrips Other States In\nAverage Award Amount Per Grant") + theme_bw() + scale_y_continuous(limits = c(0, 600000), breaks = c(0, 100000, 200000, 300000, 400000, 500000, 600000), labels = c("$0", "$100,000", "$200,000", "$300,000", "$400,000", "$500,000", "$600,000")) + geom_text(aes(label = dollar(AAmedian), color = highlight), position = position_dodge(width = 0.9), vjust = -0.3, fontface= "bold", size = 5) + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) + theme(legend.position = "none") + scale_color_manual(values = c("Highlight" = "steelblue2","Other" = "grey35"))
+```
+```{r}
+statepop$highlight2 = ifelse(statepop$state == "CA", "Highlight", "Other")
+
+ggplot(na.omit(statepop), aes(x = state, y = DAYmedian, fill = highlight2)) +
+  geom_col(color = "black") + xlab("State") + ylab("Average Days Between Application Recieved Date\n and Award Date for Each Grant") + ggtitle("CA Has Astongingishly Low Wait Time Per Grant On Average") + theme_bw() + scale_y_continuous(limits = c(0, 200), breaks = c(0, 25, 50, 75, 100, 125, 150, 175, 200)) + geom_text(aes(label = DAYmedian, color = highlight2), position = position_dodge(width = 0.9), vjust = -0.3, fontface= "bold", size = 5) + scale_fill_manual(values = c("Highlight" = "red",
+  "Other" = "grey35")) + theme(legend.position = "none") + scale_color_manual(values = c("Highlight" = "red","Other" = "grey35"))
+```
+now we take a general stance, seeing how our features of interest have changed throughout the years. we looked at this at the top of the file but now we graph it
+
+```{r}
+overallyears = masterdf %>%
+  group_by(year) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsd = sd(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsd = sd(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsd = sd(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+overallyears
+```
+```{r}
+overallyears$year = as.character(overallyears$year)
+ggplot(overallyears,
+       aes(x = year, y = AAmedian, group = 1)) + geom_line(linewidth = 1.2, color = "steelblue2") + geom_point(size = 2, color = "steelblue2") + theme_bw() + xlab("Year") + ylab("Average Award Amount Per Grant")  + ggtitle("Average Award Amount Per Grant Throughout the Years") + scale_y_continuous(limits = c(0, 225000), breaks = c(0, 50000, 100000, 150000, 200000), labels = c("$0", "$50,000", "$100,000", "$150,000", "$200,000")) 
+```
+
+```{r}
+ggplot(overallyears,
+       aes(x = year, y = n, group = 1)) + geom_line(linewidth = 1.2, color = "steelblue2") + geom_point(size = 2, color = "steelblue2") + theme_bw() + xlab("Year") + ylab("Total Number of Grants") + ggtitle("Total Number of Grants Given Per Year") + scale_y_continuous(limits = c(0, 4000), breaks = c(0, 1000, 2000, 3000, 4000)) 
+```
+
+
+```{r}
+ggplot(overallyears,
+       aes(x = year, y = DAYmedian, group = 1)) + geom_line(linewidth = 1.2, color = "steelblue") + geom_point(size = 2, color = "steelblue") + theme_bw() + xlab("Year") + ylab("Average Days Between Application Received Date \n and Award Date for Each Grant") + labs(color = "Census Population") + ggtitle("Average Wait Time Per Grant Show to Increase Throughout the Years") + scale_y_continuous(limits = c(0, 90), breaks = c(0, 15, 30, 45, 60, 75, 90)) 
+#+ geom_hline(yintercept = median(masterdf$days_between, na.rm = TRUE), linetype = "dashed", color = "red", linewidth = 0.8, alpha = 0.6)
+```
+```{r}
+summary(masterdf$award.amount)
+```
+
+```{r}
+statestats = masterdf %>%
+  group_by(state) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsd = sd(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsd = sd(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsd = sd(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+statestats
+```
+
+for states with over 50 grants: the states looking to get the most money per grant on average is RI, NJ, PA and MA; these are all east coast states. there is most likely a link. however, some of these states, like DC and PA, have some of the longest wait times. what could the link be?
+
+```{r}
+table(masterdf$state, masterdf$census.population)
+```
+```{r}
+sort(table(masterdf$grant.type, useNA = "always"), decreasing = TRUE)
+```
+
+we now also look at new vs continuing grants. initially, we clean the column up so its only new vs continutation. then we create the table
+
+```{r}
+counts = table(masterdf$grant.type)
+masterdf$grant.type[masterdf$grant.type %in% names(counts[counts < 40])] = NA
+```
+
+```{r}
+granttypestats = masterdf %>%
+  filter(!is.na(grant.type)) %>%
+  group_by(grant.type) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+granttypestats
+```
+continuation beats new grants by a large amount in award amount, which is interesting. they both also have similar wait times, which confirms previous thorughts that wait tiems dont really differ between groups. below we compare how it is throughout the years
+
+```{r}
+yeartypetable = masterdf %>%
+  filter(!is.na(year), !is.na(grant.type)) %>%
+  group_by(year, grant.type) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    DAYSmedian = median(days_between, na.rm = TRUE),
+    .groups = "drop"
+  )
+yeartypetable
+```
+while the patterns above are as expected, something I didn't expect is how continuing grants came to outnumber new grants. while this does make sense once you think abut it, i still find it surprising that despite such a difference, it shifted so that continuation got the most grants
+
+below, we graph our results from above. 
+```{r}
+coolcolors = c("steelblue2", "gray35")
+
+ggplot(yeartypetable,
+       aes(x = year, y = n, color = grant.type, group = grant.type)) + geom_line(linewidth = 1.2) + geom_point(size = 2) + theme_bw() + scale_color_manual(values = coolcolors, labels = c("CONTINUATION" = "Continuation", "NEW" = "New")) + xlab("Year") + ylab("Number of Grants") + labs(color = "Grant Type") + ggtitle("Amount of Grants of Each Grant Type Throughout the Years") + scale_y_continuous(limits = c(0, 2750), breaks = c(0, 500, 1000, 1500, 2000, 2500)) + scale_x_continuous(breaks = 1974:1981) 
+```
+```{r}
+granttypestats$highlight = ifelse(((granttypestats$grant.type == "NEW")),
+                                   "Highlight", "Other")
+```
+
+```{r}
+ggplot(na.omit(granttypestats), aes(x = grant.type, y = AAmedian, fill = highlight)) +
+  geom_col(color = "black") + xlab("Grant Type") + ylab("Average Award Amount Per Grant") + ggtitle("Continuing Grants Get Significantly More Money\non Average Compared to New Grants") + theme_bw() + scale_y_continuous(limits = c(0, 310000), breaks = c(0, 50000, 100000, 150000, 200000, 250000, 300000), labels = c("$0", "$50,000", "$100,000", "$150,000", "$200,000", "$250,000", "$300,000")) + geom_text(aes(label = dollar(AAmedian), color = highlight), position = position_dodge(width = 0.9), vjust = -0.3, fontface= "bold", size = 5) + scale_fill_manual(values = c("Highlight" = "gray35",
+  "Other" = "steelblue2")) + theme(legend.position = "none") + scale_color_manual(values = c("Highlight" = "grey35","Other" = "steelblue2")) + scale_x_discrete(labels = c("Continuation", "New"))
+```
+```{r}
+ggplot(na.omit(granttypestats), aes(x = grant.type, y = DAYmedian)) +
+  geom_col(color = "black") + xlab("Grant Type") + ylab("Average Days Between Application Received Date \n and Award Date for Each Grant") + ggtitle("Both Grant Types Look to Have Similar Wait Times On Average") + theme_bw() + scale_y_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) + geom_text(aes(label = DAYmedian), position = position_dodge(width = 0.9), vjust = -0.3, fontface= "bold", size = 6
+  )
+```
+As a bonus: I am not entirely sure this is useful, but i am going to compare eligible cost and award amount. specifically, I was told that award amount should be about 75% of eligible cost. I am going to see for how many grants this is true 
+```{r}
+masterdf$moneyratio = masterdf$award.amount / masterdf$eligible.cost
+masterdf$moneytrue = ifelse((masterdf$moneyratio > 0.70) & (masterdf$moneyratio < 0.80), TRUE, FALSE)
+```
+
+```{r}
+table(masterdf$moneytrue)
+```
+many are true,but 584 are not. so only ~3% of the data does not follow the above principle. below i make a table of our variables of interest to see if there are any interesting relationships 
+
+```{r}
+moneytruetable = masterdf %>%
+  filter(!is.na(moneytrue)) %>%
+  group_by(moneytrue) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+moneytruetable
+```
+those where the ratio wasnt about 75% had a lot higher average award amount. this makes it likely that these award amounts were high outliers, not low ones
+
+```{r}
+sort(table(masterdf[masterdf$moneytrue == FALSE, "state"]), decreasing = TRUE)
+```
+distribution of states to highly differ. big populous states are at the top which makes sense
+
+```{r}
+sort(table(masterdf[masterdf$moneytrue == FALSE, "region"]), decreasing = TRUE)
+```
+
+we extract the masterdf for future use, since we will not be making anymore edits to it
+```{r}
+write.xlsx(masterdf, "masterdf.xlsx")
+getwd()
+```
+
+we now carry out another case study, this time with specific states and counties. we make 
+a new df for these places
+```{r}
+citylist = c("PHILADELPHIA","ATLANTA","CLEVELAND","DETROIT","CHICAGO","LOS ANGELES", "SAN FRANCISCO")
+placedf = masterdf[(masterdf$city %in% citylist) |((masterdf$county == "SUFFOLK") & (masterdf$state == "NY")) | ((masterdf$county == "DELAWARE") & (masterdf$state == "OH")), ]
+```
+
+while this is not technically correct, for the entries where the county is suffolk or delaware, we change the city to "X county". this is for organization and makes it easier for visualization. we do not care about the cities the counties are in so we can get away with this
+```{r}
+placedf$city[placedf$county == "SUFFOLK"] = "SUFFOLK COUNTY"
+placedf$city[placedf$county == "DELAWARE"] = "DELAWARE COUNTY"
+```
+
+looking at the entries there really isnt much entries for the counties. we will still work with themas intended regardless
+```{r}
+table(placedf$city)
+```
+
+```{r}
+placestats = placedf %>%
+  filter(!is.na(city)) %>%
+  group_by(city) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+placestats
+```
+```{r}
+placestats$highlight = ifelse(((placestats$city == "PHILADELPHIA")),
+                                   "Highlight", "Other")
+
+ggplot(na.omit(placestats), aes(y = city, x = AAmedian, fill = highlight)) +
+  geom_col(color = "black") + ylab("City") + xlab("Average Award Amount Per Grant") + ggtitle("Philadelphia Gets Significantly More Award Money\non Average Compared to Other Cities") + theme_bw() + scale_x_continuous(limits = c(0, 13000000), breaks = c(0, 2000000, 4000000, 6000000, 8000000, 10000000, 12000000), labels = c("$0", "$2,000,000","$4,000,000","$6,000,000","$8,000,000", "$10,000,000", "$12,000,000"))  + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) +
+  theme(legend.position = "none")
+```
+whats interested is that results differ when comparing mean vs median. san francisco has the higher mean, but philadelphia has a higher median. i have been using median throughout all the data due to lack of symmetry in the data, but this is interesting
+
+```{r}
+placestats$highlight2 = ifelse(((placestats$city == "CHICAGO") | (placestats$city == "DETROIT") | (placestats$city == "CLEVELAND")),
+                                   "Highlight", "Other")
+
+ggplot(na.omit(placestats), aes(y = city, x = n, fill = highlight2)) +
+  geom_col(color = "black") + ylab("City") + xlab("Number of Grants") + ggtitle("Distribution of Grants Among Cities / Counties of Interest") + theme_bw() + scale_x_continuous(limits = c(0, 60), breaks = c(0, 15, 30, 45, 60))  + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) + theme(legend.position = "none") 
+```
+```{r}
+placestats$highlight4 = ifelse(((placestats$city == "CHICAGO") | (placestats$city == "SAN FRANCISCO")),"Highlight", "Other")
+
+
+
+ggplot(na.omit(placestats), aes(y = city, x = AAsum, fill = highlight4)) +
+  geom_col(color = "black") + ylab("City") + xlab("Total Award Money Received") + ggtitle("Chicago and San Francisco Got the Most Total\nAward Money Compared to the Other Locations") + theme_bw() + scale_x_continuous(limits = c(0, 800000000), breaks = c(0, 200000000, 400000000, 600000000, 800000000), labels = c("$0", "$200,000,000", "$400,000,000", "$600,000,000", "$800,000,000"))  + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) +
+  theme(legend.position = "none", plot.margin = margin(5.5, 20, 5.5, 5.5))
+```
+
+
+
+```{r}
+placestats$highlight3 = ifelse(((placestats$city == "SAN FRANCISCO")),
+                                   "Highlight", "Other")
+
+ggplot(na.omit(placestats), aes(y = city, x = DAYmedian, fill = highlight3)) +
+  geom_col(color = "black") + ylab("City") + xlab("Average Wait Time (in Days)") + ggtitle("San Francisco Has Extremely Low Wait Times Whereas\nCounties Have Extremely High Wait Times") + theme_bw() + scale_x_continuous(limits = c(0, 350), breaks = c(0, 50,100,150,200,250,300,350))  + scale_fill_manual(values = c("Highlight" = "steelblue2",
+  "Other" = "grey35")) + theme(legend.position = "none") 
+```
+```{r}
+placeyearstats = placedf %>%
+  filter(!is.na(city), !is.na(year)) %>%
+  group_by(year, city) %>%
+  summarise(
+    n = n(),
+    AAmean = mean(award.amount, na.rm = TRUE),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmean = mean(eligible.cost, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmean = mean(days_between, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+placeyearstats
+```
+```{r}
+blue_theme <- c(
+  "#4E79A7", # blue
+  "#76B7B2", # teal
+  "#59A14F", # green
+  "#9C755F", # brown
+  "#B07AA1", # purple
+  "#E15759", # muted red
+  "#F28E2B", # orange
+  "#EDC948", # mustard
+  "#C6DBEF"  # pale blue
+)
+
+ggplot(placeyearstats,
+       aes(x = year, y = AAmedian, color = city, group = city)) + geom_line(linewidth = 1.2) + geom_point(size = 2) + theme_bw() + scale_color_manual(values = blue_theme) + xlab("Year") + ylab("Average Award Amount Per Grant") + labs(color = "Municipality") + ggtitle("Average Award Amount Per Grant\n For Each Municipality Throughout the Years") + scale_y_continuous(limits = c(0, 50000000), breaks = c(0, 5000000, 10000000, 15000000, 20000000, 25000000, 50000000), labels = c("$0", "$5,000,000", "$10,000,000", "$15,000,000", "$20,000,000", "$25,000,000", "$50,000,000")) + scale_x_continuous(breaks = 1974:1981) 
+```
+incredibly varied throughout the years. unsure of the specific reasons but interesting nonetheless. this concludes the case study section. cleveland, atlanta, and detroit pale in comparison to cities such as philadelphia and chicago. their award amounts are so incredibly high, i wonder what the reaosn is
+
+here we determine the counties that got the most grants
+```{r}
+sort(table(masterdf$county), decreasing = TRUE)
+```
+
+the top 3 is washington, jefferson, and jackson. there ought to be caution in that there are multiple washington, jefferson, and jackson counties. upon doing some research, i found that 4th place, cook county, is unique and is the second-most populous county in the U.S. Thus i think it is valid to determine this county as the county to get the most grants
+
+```{r}
+masterdf$county_state = paste(masterdf$county, masterdf$state, sep = ", ")
+sort(table(masterdf$county_state), decreasing = TRUE)
+```
+we check the above assertion with this code. i seem to be correct. the top 3 counties in terms of amount of grants is cook, IL (134), King, WA (95), and Los angeles, CA (89)
+
+```{r}
+masterdf$city_state = paste(masterdf$city, masterdf$county_state, sep = ", ")
+sort(table(masterdf$city_state), decreasing = TRUE)
+```
+i did the same as above with cities. we can see the the top 3 cities in terms of amount of grants is santurce (100), chicago (54), and detroit (48). i am surprised santurce is on here
+
+```{r}
+countytable = masterdf %>%
+  filter(!is.na(county_state)) %>%
+  group_by(county_state) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+countytable
+```
+
+```{r}
+countytable[order(countytable$AAsum, decreasing = TRUE), ]
+```
+cook and san francisco land at the top for the counties that got the most total money for their awards
+
+```{r}
+citytable = masterdf %>%
+  filter(!is.na(city_state)) %>%
+  group_by(city_state) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+countytable
+```
+
+```{r}
+citytable[order(citytable$AAsum, decreasing = TRUE), ]
+```
+the cities that got the most money overall are chicago and san francisco
+
+now we will look at the municipalities where the population is under 2,500 / 3,500 and then over 500,000. first we look at the smaller populations. we are trying to find the municipalities that got the most grants and award money on average
+```{r}
+smalllocsdf = masterdf[(masterdf$census.population == "LESS THAN 2,500") | (masterdf$census.population == "LESS THAN 3,500"), ]
+```
+
+we also add state to the back of county names as a string. this allows us to see individual counties and separate counties that have the same name
+```{r}
+smalllocsdf$county = paste(smalllocsdf$county, smalllocsdf$state, sep = ", ")
+```
+
+
+```{r}
+sort(table(smalllocsdf$county), decreasing = TRUE)
+```
+in the small locations, the counties to get the most grants were Humboldt, CA and Leflore, OK, both with 18 grants.
+
+now we try to find what counties got the highest amount of money
+```{r}
+smalltable = smalllocsdf %>%
+  filter(!is.na(county)) %>%
+  group_by(county) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+smalltable
+```
+
+```{r}
+smalltable[order(smalltable$AAsum, decreasing = TRUE), ]
+```
+of these smaller municipalities, we can see the counties that got the most total award money werre Merrimack, NH, Marshall, WV, and Franklin, PA. they are all 8 digits
+
+Now we do the same but with the locations with a census population of over 500,000
+```{r}
+biglocsdf = masterdf[(masterdf$census.population == "OVER 500,000"), ]
+```
+
+we also add state to the back of county names as a string. this allows us to see individual counties and separate counties that have the same name
+```{r}
+biglocsdf$county = paste(biglocsdf$county, biglocsdf$state, sep = ", ")
+```
+
+
+```{r}
+sort(table(biglocsdf$county), decreasing = TRUE)
+```
+in the big locations, the counties to get the most grants were Los angeles (39), King WA (32), and Wayne MI (29). cook is also not that far behind (28)
+
+now we try to find what counties got the highest amount of money
+```{r}
+bigtable = biglocsdf %>%
+  filter(!is.na(county)) %>%
+  group_by(county) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+bigtable
+```
+
+```{r}
+bigtable[order(bigtable$AAsum, decreasing = TRUE), ]
+```
+the top 3 counties for the big locations in terms of total award amount makes sense: cook, san francisco, and philadelphia. an important trend seen in both small and big table: having the most grants does not necessarily mean the county got the most total award money
+
+
+now we will do the same as above but with cities. results shouldnt be super surprising. we combine city with county and state due to the possibility that a city could appear more than once in a specific state
+```{r}
+smalllocsdf$city = paste(smalllocsdf$city, smalllocsdf$county, sep = ", ")
+```
+
+
+```{r}
+sort(table(smalllocsdf$city), decreasing = TRUE)
+```
+in the small locations, the cities to get the most grants were annapolis MD (15), cumberland MD (11), and Hot springs, AR (11)
+
+now we try to find what counties got the highest amount of money
+```{r}
+smalltable2 = smalllocsdf %>%
+  filter(!is.na(city)) %>%
+  group_by(city) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+```
+
+```{r}
+smalltable2[order(smalltable2$AAsum, decreasing = TRUE), ]
+```
+in the small locations, the cities to get the most total award money were concord NH, Spencer WV, and Bellingham WV. mostly unknown cities but makes sense since they have lower pops
+
+
+Now we do the same but with the locations with a census population of over 500,000
+```{r}
+biglocsdf = masterdf[(masterdf$census.population == "OVER 500,000"), ]
+```
+
+we also add state to the back of county names as a string. this allows us to see individual counties and separate counties that have the same name
+```{r}
+biglocsdf$city = paste(biglocsdf$city, biglocsdf$county, sep = ", ")
+```
+
+
+```{r}
+sort(table(biglocsdf$city), decreasing = TRUE)
+```
+in the big locations, the cties to get the most grants were Seattle WA (32), Whittier CA (30), Detroit, MI (29)
+
+now we try to find what counties got the highest amount of money
+```{r}
+bigtable2 = biglocsdf %>%
+  filter(!is.na(city)) %>%
+  group_by(city) %>%
+  summarise(
+    n = n(),
+    AAmedian = median(award.amount, na.rm = TRUE),
+    AAsum = sum(award.amount, na.rm = TRUE),
+    ECmedian = median(eligible.cost, na.rm = TRUE),
+    ECsum = sum(eligible.cost, na.rm = TRUE),
+    DAYmedian = median(days_between, na.rm = TRUE),
+    DAYsum = sum(days_between, na.rm = TRUE)
+  )
+```
+
+```{r}
+bigtable2[order(bigtable2$AAsum, decreasing = TRUE), ]
+```
+like in counties, the cities to get the most total award money is chicago IL (in cook) and san francisco CA. for cities, philadelphia is also at the top
+
+
+```{r}
+justphilly = masterdf[masterdf$city == "PHILADELPHIA", ]
+```
+
+```{r}
+write.xlsx(justphilly, "justphilly.xlsx")
+getwd()
+```
+

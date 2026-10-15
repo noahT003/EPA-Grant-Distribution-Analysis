@@ -1,0 +1,43 @@
+---
+title: "citystatezip"
+author: "Noah Thomas"
+date: "2026-07-17"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+necessary libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(openxlsx)
+```
+
+load in gis master file data (so far)
+```{r}
+gismaster = read.csv("GISmaster.csv", header = TRUE, colClasses = c(ZIP_code_filled = "character"))
+```
+
+we create a new column citystatezip, that shows each grants city, state, and zip in one string
+```{r}
+gismaster$citystate = paste(gismaster$city_filled, gismaster$state_filled, sep = ", ")
+gismaster$citystatezip = paste(gismaster$citystate, gismaster$ZIP_code_filled, sep = ", ")
+```
+
+we do this to get a new dataframe: uniquecounts. this allows us to see each unique city, state, zip combination and how many times each occurs
+```{r}
+uniquecounts = gismaster %>%
+  count(citystatezip, name = "count") %>%
+  select(count, citystatezip)
+```
+
+our dataframe works as intended, so we download and observe results in sheets
+```{r}
+write.xlsx(uniquecounts, "uniquecounts.xlsx")
+getwd()
+```

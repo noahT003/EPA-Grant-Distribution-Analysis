@@ -1,0 +1,48 @@
+---
+title: "citystateformap"
+author: "Noah Thomas"
+date: "2026-09-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+necessary libraries
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(openxlsx)
+```
+
+load in gis city geocoded data from our arcGIS map. exported straight from our map. Our objective is to get every unique city / state combo and make a csv with it so the searching process is straightforward
+```{r}
+gismaster = read.csv("master_spreadsheet_by_individual_award__GIS_version__07302026_CITY_Geocoded_3.csv", header = TRUE)
+```
+
+subset to only the features we care about
+```{r}
+gismaster2 = gismaster[, c("Match.Address", "X", "Y")]
+```
+
+
+We then get rid of any duplicated entries in city state. as this spreadsheet will be used as a map layer to make searching a seemless experience, this makes sense
+```{r}
+gismaster3 = gismaster2[!duplicated(gismaster2$Match.Address), ]
+```
+
+We also omit NAs so mapping is easier
+```{r}
+gismaster3 = na.omit(gismaster3)
+```
+
+we have obtained the spreadsheet we want, so now we export and we are done
+```{r}
+write.xlsx(gismaster3, "citystate4maplayerX.xlsx")
+getwd()
+```
+
+
+
