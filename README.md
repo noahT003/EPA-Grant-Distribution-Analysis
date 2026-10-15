@@ -4,7 +4,7 @@
 Cleaned, organized, and performed data analysis on 18,000+ Environmental Protection Agency (EPA) grant records from 1974 - 1980. With the cleaned data created an interactive dashboard with a map of our data on arcGIS (link: https://www.arcgis.com/apps/dashboards/7ccd90d6266140d388b2f592396767ab)
 
 ## Objective
-Create a resource for not only us, but other researchers to analyze and ask questions about the distribution of EPA grants and backup claims that certain regions get more support than others
+The goal of this project is to create a structured, accessible dataset that allows researchers to examine historical EPA grant distribution patterns and evaluate regional differences in federal environmental funding backup our own claims that certain regions get more financial support from the government than others
 
 ## Data
 Before our project, there was not publicly available data of EPA grants from 1974 - 1980. We were able to contact the government to acquire the data, but it was in thousands of pdf scans. Thus, the original spreadsheets were made from using text recognition software (transkribus) to map certain areas of the pdf to a column in a spreadsheet. The data represents lots of different information about each grant, such as award amount, location(city, state, zipcode, etc.), population, and more.
@@ -22,6 +22,7 @@ Excel, arcGIS, R. Utilized ggplot and tidyverse packages
 ## Key Findings (in analysis)
 - Grants in highly populated locations obtained higher award amounts per on average
 - locations with a lower population got more grants on average
+- Geographic mapping revealed regional differences in EPA grant distribution patterns
 
 ## Folders
 - code: R code that I utilized in the cleaning and analysis process. README.docx describes specifics of every file
