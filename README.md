@@ -29,11 +29,11 @@ Excel, arcGIS, R. Utilized ggplot and tidyverse packages
   - original: The versions of the data I was given from the results from the text recognition software (transkribus) 
   - cleaned: Cleaned versions of the spreadsheets in the original folder. also includes combined master spreadsheet. More details on specifics of each file in README.docx
   - extra: additional spreadsheets I used to add information to my master file for mapping / statistics purposes. More details on specifics of each file in README.docx
-- documents:
-- visualizations:
+- documents: files listing my documentation process for each step of the project and slideshows I have used in presenting my project. As this project is ongoing, the documentation files will be further updated in the future. For more in depth commentary on my steps in this project, read the documentation
+- visualizations: Cleaned up versions of graphs I have created as part of my R code. Graphs showcase general findings from when I conducted analysis
 
 ## How to Run
-Explain how someone can open or run the project.
+The grant1974.Rmd - grant1980.Rmd files can be ran with the original spreadsheet files in the same folder. As I acquired the final cleaned versions of each year's grant spreadsheet through Excel itself, they cannot exactly be recreated by hand (without a lot of time put into it). Thus for my grantsdataanalysis.Rmd file use the cleaned versions of the grant files in the same folder. Extra additions to the master file that got it to the GIS master file was done through a variety of methods in and out of R, and mostly all other files should work as intended with the master file and if not the file will say so. More specifics are detailed in the respective README.docx files.
 
 ## Notes
 - This project is still ongoing. This repository will be updated throughout the process.
