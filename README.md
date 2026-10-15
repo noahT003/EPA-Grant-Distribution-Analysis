@@ -9,7 +9,7 @@ The goal of this project is to create a structured, accessible dataset that allo
 ## Data
 Before our project, there was not publicly available data of EPA grants from 1974 - 1980. We were able to contact the government to acquire the data, but it was in thousands of pdf scans. Thus, the original spreadsheets were made from using text recognition software (transkribus) to map certain areas of the pdf to a column in a spreadsheet. The data represents lots of different information about each grant, such as award amount, location(city, state, zipcode, etc.), population, and more.
 
-##arcGIS Dashboard
+## arcGIS Dashboard
 link: https://www.arcgis.com/apps/dashboards/7ccd90d6266140d388b2f592396767ab
 
 ## Tools Used
